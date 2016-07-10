@@ -3,43 +3,45 @@ use Moo;
 
 use Slic3r::Geometry qw(X Y PI scale unscale epsilon scaled_epsilon deg2rad angle3points);
 
-extends 'Slic3r::GCode::Reader';
-has 'config'                    => (is => 'ro', required => 0);
+has 'config'                    => (is => 'ro', required => 1);
+has 'reader'            		=> (is => 'ro', default => sub { Slic3r::GCode::Reader->new });
 has 'min_segments'              => (is => 'rw', default => sub { 2 });
 has 'min_total_angle'           => (is => 'rw', default => sub { deg2rad(30) });
 has 'max_relative_angle'        => (is => 'rw', default => sub { deg2rad(15) });
 has 'len_epsilon'               => (is => 'rw', default => sub { scale 0.2 });
 has 'angle_epsilon'             => (is => 'rw', default => sub { abs(deg2rad(10)) });
-has '_extrusion_axis'           => (is => 'lazy');
+has '_extrusion_axis'   		=> (is => 'rw', default => sub { "E" });
 has '_path'                     => (is => 'rw');
 has '_cur_F'                    => (is => 'rw');
 has '_cur_E'                    => (is => 'rw');
 has '_cur_E0'                   => (is => 'rw');
 has '_comment'                  => (is => 'rw');
 
-sub _build__extrusion_axis {
+sub BUILD {
     my ($self) = @_;
-    return $self->config ? $self->config->get_extrusion_axis : 'E';
+	
+	$self->reader->apply_print_config($self->config);
+    $self->_extrusion_axis($self->config->get_extrusion_axis);
 }
 
 sub process {
     my $self = shift;
     my ($gcode) = @_;
     
-    die "Arc fitting is not available (incomplete feature)\n";
+    # die "Arc fitting is not available (incomplete feature)\n";
     die "Arc fitting doesn't support extrusion axis not being E\n" if $self->_extrusion_axis ne 'E';
     
     my $new_gcode = "";
     
-    $self->parse($gcode, sub {
+    $self->reader->parse($gcode, sub {
         my ($reader, $cmd, $args, $info) = @_;
         
         if ($info->{extruding} && $info->{dist_XY} > 0) {
             # this is an extrusion segment
-            
+			
             # get segment
             my $line = Slic3r::Line->new(
-                Slic3r::Point->new_scale($self->X, $self->Y),
+                Slic3r::Point->new_scale($reader->X, $reader->Y),
                 Slic3r::Point->new_scale($args->{X}, $args->{Y}),
             );
             
@@ -65,7 +67,7 @@ sub process {
                 $self->_path(Slic3r::Polyline->new(@$line));
                 $self->_cur_F($F);
                 $self->_cur_E($e);
-                $self->_cur_E0($self->E);
+                $self->_cur_E0($reader->E);
                 $self->_comment($info->{comment});
             }
         } else {
@@ -121,9 +123,6 @@ sub detect_arcs {
     my ($self, $path) = @_;
     
     my @chunks = ();
-    my @arc_points = ();
-    my $polyline = undef;
-    my $arc_start = undef;
     
     my @points = @$path;
     for (my $i = 1; $i <= $#points; ++$i) {
@@ -147,7 +146,7 @@ sub detect_arcs {
         if (defined $end && ($end - $i + 1) >= $self->min_segments) {
             my $arc = polyline_to_arc(Slic3r::Polyline->new(@points[($i-1)..$end]));
             
-            if (1||$arc->angle >= $self->min_total_angle) {
+            if (defined $arc && $arc->angle >= $self->min_total_angle) {
                 push @chunks, $arc;
                 
                 # continue scanning after arc points
@@ -182,16 +181,19 @@ sub polyline_to_arc {
     # around the intersections
     my $arc_center;
     {
-        my $first_ray = Slic3r::Line->new(@points[0,1]);
-        $first_ray->rotate(PI/2 * ($is_ccw ? 1 : -1), $points[0]);
+        my $v1 = Slic3r::Line->new(@points[0,1]);
+		my $m1 = $v1->midpoint(); 
+        $v1->rotate(PI/2 * ($is_ccw ? 1 : -1), $m1);
         
-        my $last_ray = Slic3r::Line->new(@points[-2,-1]);
-        $last_ray->rotate(PI/2 * ($is_ccw ? -1 : 1), $points[-1]);
+        my $v2 = Slic3r::Line->new(@points[-2,-1]);
+		my $m2 = $v2->midpoint();
+        $v2->rotate(PI/2 * ($is_ccw ? -1 : 1), $m2);
+		
         
         # require non-parallel rays in order to compute an accurate center
-        return if abs($first_ray->atan2_ - $last_ray->atan2_) < deg2rad(30);
+        return if abs($v1->atan2_ - $v2->atan2_) < deg2rad(30);
         
-        $arc_center = $first_ray->intersection($last_ray, 0) or return;
+        $arc_center = $v1->intersection($v2, 0) or return;
     }
     
     # angle measured in ccw orientation
