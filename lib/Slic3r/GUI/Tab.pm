@@ -995,7 +995,7 @@ sub build {
         serial_port serial_speed
         octoprint_host octoprint_apikey
         use_firmware_retraction pressure_advance vibration_limit
-        use_volumetric_e
+        use_volumetric_e gcode_arcs
         start_gcode end_gcode before_layer_gcode layer_gcode toolchange_gcode
         nozzle_diameter extruder_offset
         retract_length retract_lift retract_speed retract_restart_extra retract_before_travel retract_layer_change wipe
@@ -1188,6 +1188,7 @@ sub build {
             $optgroup->append_single_option_line('use_relative_e_distances');
             $optgroup->append_single_option_line('use_firmware_retraction');
             $optgroup->append_single_option_line('use_volumetric_e');
+            $optgroup->append_single_option_line('gcode_arcs');
             $optgroup->append_single_option_line('pressure_advance');
             $optgroup->append_single_option_line('vibration_limit');
         }
