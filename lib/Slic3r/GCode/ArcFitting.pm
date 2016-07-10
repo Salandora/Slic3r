@@ -4,13 +4,13 @@ use Moo;
 use Slic3r::Geometry qw(X Y PI scale unscale epsilon scaled_epsilon deg2rad angle3points);
 
 has 'config'                    => (is => 'ro', required => 1);
-has 'reader'            		=> (is => 'ro', default => sub { Slic3r::GCode::Reader->new });
+has 'reader'                    => (is => 'ro', default => sub { Slic3r::GCode::Reader->new });
 has 'min_segments'              => (is => 'rw', default => sub { 2 });
 has 'min_total_angle'           => (is => 'rw', default => sub { deg2rad(30) });
 has 'max_relative_angle'        => (is => 'rw', default => sub { deg2rad(15) });
 has 'len_epsilon'               => (is => 'rw', default => sub { scale 0.2 });
 has 'angle_epsilon'             => (is => 'rw', default => sub { abs(deg2rad(10)) });
-has '_extrusion_axis'   		=> (is => 'rw', default => sub { "E" });
+has '_extrusion_axis'           => (is => 'rw', default => sub { "E" });
 has '_path'                     => (is => 'rw');
 has '_cur_F'                    => (is => 'rw');
 has '_cur_E'                    => (is => 'rw');
@@ -20,7 +20,7 @@ has '_comment'                  => (is => 'rw');
 sub BUILD {
     my ($self) = @_;
 	
-	$self->reader->apply_print_config($self->config);
+    $self->reader->apply_print_config($self->config);
     $self->_extrusion_axis($self->config->get_extrusion_axis);
 }
 
@@ -38,7 +38,7 @@ sub process {
         
         if ($info->{extruding} && $info->{dist_XY} > 0) {
             # this is an extrusion segment
-			
+
             # get segment
             my $line = Slic3r::Line->new(
                 Slic3r::Point->new_scale($reader->X, $reader->Y),
@@ -182,11 +182,11 @@ sub polyline_to_arc {
     my $arc_center;
     {
         my $v1 = Slic3r::Line->new(@points[0,1]);
-		my $m1 = $v1->midpoint(); 
+        my $m1 = $v1->midpoint(); 
         $v1->rotate(PI/2 * ($is_ccw ? 1 : -1), $m1);
         
         my $v2 = Slic3r::Line->new(@points[-2,-1]);
-		my $m2 = $v2->midpoint();
+        my $m2 = $v2->midpoint();
         $v2->rotate(PI/2 * ($is_ccw ? -1 : 1), $m2);
 		
         
