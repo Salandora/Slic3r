@@ -19,3 +19,4 @@ addons:
     packages:
     - libboost-thread1.55-dev
     - libboost-system1.55-dev
+    - libboost-filesystem1.55-dev
