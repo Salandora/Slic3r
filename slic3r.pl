@@ -29,6 +29,7 @@ my %cli_options = ();
         'debug'                 => \$Slic3r::debug,
         'gui'                   => \$opt{gui},
         'o|output=s'            => \$opt{output},
+        'j|threads=i'           => \$opt{threads},
         
         'save=s'                => \$opt{save},
         'load=s@'               => \$opt{load},
@@ -109,15 +110,18 @@ if ((!@ARGV || $opt{gui}) && !$opt{save} && eval "require Slic3r::GUI; 1") {
         $Slic3r::GUI::no_plater     = $opt{no_plater};
         $Slic3r::GUI::mode          = $opt{gui_mode};
         $Slic3r::GUI::autosave      = $opt{autosave};
+        $Slic3r::GUI::threads       = $opt{threads};
     }
     $gui = Slic3r::GUI->new;
     setlocale(LC_NUMERIC, 'C');
-    $gui->{mainframe}->load_config_file($_) for @{$opt{load}};
-    $gui->{mainframe}->load_config($cli_config);
-    foreach my $input_file (@ARGV) {
-        $input_file = Slic3r::decode_path($input_file);
-        $gui->{mainframe}{plater}->load_file($input_file) unless $opt{no_plater};
-    }
+    $gui->CallAfter(sub {
+        $gui->{mainframe}->load_config_file($_) for @{$opt{load}};
+        $gui->{mainframe}->load_config($cli_config);
+        foreach my $input_file (@ARGV) {
+            $input_file = Slic3r::decode_path($input_file);
+            $gui->{mainframe}{plater}->load_file($input_file) unless $opt{no_plater};
+        }
+    });
     $gui->MainLoop;
     exit;
 }
@@ -217,7 +221,7 @@ if (@ARGV) {  # slicing from command line
             foreach my $new_mesh (@{$mesh->split}) {
                 my $output_file = sprintf '%s_%02d.stl', $file, ++$part_count;
                 printf "Writing to %s\n", basename($output_file);
-                Slic3r::Format::STL->write_file($output_file, $new_mesh, binary => 1);
+                $new_mesh->write_binary($output_file);
             }
         }
         exit;
@@ -251,7 +255,7 @@ if (@ARGV) {  # slicing from command line
             rotate          => deg2rad($opt{rotate} // 0),
             duplicate       => $opt{duplicate}      // 1,
             duplicate_grid  => $opt{duplicate_grid} // [1,1],
-            print_center    => $opt{print_center}   // Slic3r::Pointf->new(100,100),
+            print_center    => $opt{print_center},
             dont_arrange    => $opt{dont_arrange}   // 0,
             status_cb       => sub {
                 my ($percent, $message) = @_;
@@ -261,6 +265,7 @@ if (@ARGV) {  # slicing from command line
         );
         
         $sprint->apply_config($config);
+        $sprint->config->set('threads', $opt{threads}) if $opt{threads};
         $sprint->set_model($model);
         
         if ($opt{export_svg}) {
@@ -291,7 +296,7 @@ sub usage {
     my $j = '';
     if ($Slic3r::have_threads) {
         $j = <<"EOF";
-    -j, --threads <num> Number of threads to use (1+, default: $config->{threads})
+    -j, --threads <num> Number of threads to use
 EOF
     }
     
@@ -345,6 +350,8 @@ $j
                         (default: 100,100)
     --z-offset          Additional height in mm to add to vertical coordinates
                         (+/-, default: $config->{z_offset})
+    --z-steps-per-mm    Number of full steps per mm of the Z axis. Experimental feature for
+                        preventing rounding issues.
     --gcode-flavor      The type of G-code to generate (reprap/teacup/repetier/makerware/sailfish/mach3/machinekit/smoothie/no-extrusion,
                         default: $config->{gcode_flavor})
     --use-relative-e-distances Enable this to get relative E values (default: no)
@@ -428,7 +435,11 @@ $j
     --fill-density      Infill density (range: 0%-100%, default: $config->{fill_density}%)
     --fill-angle        Infill angle in degrees (range: 0-90, default: $config->{fill_angle})
     --fill-pattern      Pattern to use to fill non-solid layers (default: $config->{fill_pattern})
-    --external-fill-pattern Pattern to use to fill solid layers (default: $config->{external_fill_pattern})
+    --fill-gaps         Fill gaps with single passes (default: yes)
+    --external-infill-pattern Pattern to use to fill solid layers.
+                        (Shortcut for --top-infill-pattern and --bottom-infill-pattern)
+    --top-infill-pattern Pattern to use to fill top solid layers (default: $config->{top_infill_pattern})
+    --bottom-infill-pattern Pattern to use to fill bottom solid layers (default: $config->{bottom_infill_pattern})
     --start-gcode       Load initial G-code from the supplied file. This will overwrite
                         the default command (home all axes [G28]).
     --end-gcode         Load final G-code from the supplied file. This will overwrite 
@@ -455,7 +466,7 @@ $j
     --extra-perimeters  Add more perimeters when needed (default: yes)
     --avoid-crossing-perimeters Optimize travel moves so that no perimeters are crossed (default: no)
     --thin-walls        Detect single-width walls (default: yes)
-    --overhangs         Experimental option to use bridge flow, speed and fan for overhangs
+    --detect-bridging-perimeters  Detect bridging perimeters and apply bridge flow, speed and fan
                         (default: yes)
   
    Support material options:
@@ -527,6 +538,8 @@ $j
                         of filament on the first layer, for each extruder (mm, 0+, default: $config->{min_skirt_length})
     --brim-width        Width of the brim that will get added to each object to help adhesion
                         (mm, default: $config->{brim_width})
+    --interior-brim-width  Width of the brim that will get printed inside object holes to help adhesion
+                        (mm, default: $config->{interior_brim_width})
    
    Transform options:
     --scale             Factor for scaling input object (default: 1)

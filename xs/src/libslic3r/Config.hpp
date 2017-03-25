@@ -248,6 +248,7 @@ class ConfigOptionStrings : public ConfigOptionVector<std::string>
     };
     
     bool deserialize(std::string str, bool append = false) {
+        if (!append) this->values.clear();
         return unescape_strings_cstyle(str, this->values);
     };
 };
@@ -390,24 +391,7 @@ class ConfigOptionPoints : public ConfigOptionVector<Pointf>
         return vv;
     };
     
-    bool deserialize(std::string str, bool append = false) {
-        if (!append) this->values.clear();
-        std::istringstream is(str);
-        std::string point_str;
-        while (std::getline(is, point_str, ',')) {
-            Pointf point;
-            std::istringstream iss(point_str);
-            std::string coord_str;
-            if (std::getline(iss, coord_str, 'x')) {
-                std::istringstream(coord_str) >> point.x;
-                if (std::getline(iss, coord_str, 'x')) {
-                    std::istringstream(coord_str) >> point.y;
-                }
-            }
-            this->values.push_back(point);
-        }
-        return true;
-    };
+    bool deserialize(std::string str, bool append = false);
 };
 
 class ConfigOptionBool : public ConfigOptionSingle<bool>
@@ -565,10 +549,9 @@ class ConfigOptionDef
     // Special values - "i_enum_open", "f_enum_open" to provide combo box for int or float selection,
     // "select_open" - to open a selection dialog (currently only a serial port selection).
     std::string gui_type;
-    // Usually empty. Otherwise "serialized" or "show_value"
     // The flags may be combined.
-    // "serialized" - vector valued option is entered in a single edit field. Values are separated by a semicolon.
     // "show_value" - even if enum_values / enum_labels are set, still display the value, not the enum label.
+    // "align_label_right" - align label to right
     std::string gui_flags;
     // Label of the GUI input field.
     // In case the GUI input fields are grouped in some views, the label defines a short label of a grouped value,
@@ -642,6 +625,8 @@ class ConfigDef
     public:
     t_optiondef_map options;
     ConfigOptionDef* add(const t_config_option_key &opt_key, ConfigOptionType type);
+    ConfigOptionDef* add(const t_config_option_key &opt_key, const ConfigOptionDef &def);
+    bool has(const t_config_option_key &opt_key) const;
     const ConfigOptionDef* get(const t_config_option_key &opt_key) const;
     void merge(const ConfigDef &other);
 };
@@ -668,7 +653,7 @@ class ConfigBase
     bool equals(ConfigBase &other);
     t_config_option_keys diff(ConfigBase &other);
     std::string serialize(const t_config_option_key &opt_key) const;
-    bool set_deserialize(const t_config_option_key &opt_key, std::string str, bool append = false);
+    virtual bool set_deserialize(t_config_option_key opt_key, std::string str, bool append = false);
     double get_abs_value(const t_config_option_key &opt_key) const;
     double get_abs_value(const t_config_option_key &opt_key, double ratio_over) const;
     void setenv_();
@@ -691,6 +676,7 @@ class DynamicConfig : public virtual ConfigBase
     virtual ConfigOption* optptr(const t_config_option_key &opt_key, bool create = false);
     t_config_option_keys keys() const;
     void erase(const t_config_option_key &opt_key);
+    void read_cli(const std::vector<std::string> &tokens, t_config_option_keys* extra);
     void read_cli(const int argc, const char **argv, t_config_option_keys* extra);
     
     private:

@@ -67,7 +67,9 @@ LayerRegion::make_fill()
                 
                 group_attrib[i].is_solid = true;
                 group_attrib[i].fw = (surface.surface_type == stTop) ? top_solid_infill_flow.width : solid_infill_flow.width;
-                group_attrib[i].pattern = surface.is_external() ? this->region()->config.external_fill_pattern.value : ipRectilinear;
+                group_attrib[i].pattern = surface.surface_type == stTop ? this->region()->config.top_infill_pattern.value
+                    : surface.is_bottom() ? this->region()->config.bottom_infill_pattern.value
+                    : ipRectilinear;
             }
             // Loop through solid groups, find compatible groups and append them to this one.
             for (size_t i = 0; i < groups.size(); ++i) {
@@ -171,8 +173,8 @@ LayerRegion::make_fill()
         
         if (surface.is_solid()) {
             density = 100.;
-            fill_pattern = (surface.is_external() && !is_bridge)
-                ? this->region()->config.external_fill_pattern.value
+            fill_pattern = (surface.surface_type == stTop) ? this->region()->config.top_infill_pattern.value
+                : (surface.is_bottom() && !is_bridge)      ? this->region()->config.bottom_infill_pattern.value
                 : ipRectilinear;
         } else if (density <= 0)
             continue;
@@ -244,6 +246,12 @@ LayerRegion::make_fill()
         // apply half spacing using this flow's own spacing and generate infill
         f->density = density/100;
         f->dont_adjust = false;
+        /*
+        std::cout << surface.expolygon.dump_perl() << std::endl
+            << " layer_id: " << f->layer_id << " z: " << f->z
+            << " angle: " << f->angle << " min-spacing: " << f->min_spacing
+            << " endpoints_overlap: " << f->endpoints_overlap << std::endl << std::endl;
+        */
         Polylines polylines = f->fill_surface(surface);
         if (polylines.empty())
             continue;
